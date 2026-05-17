@@ -10,6 +10,7 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { PersistentCache } from "./persistent-cache.js";
 import { rm } from "node:fs/promises";
+import { once } from "node:stream";
 
 interface FpcalcOutput {
 	duration: number;
@@ -49,88 +50,56 @@ export class ChromaprintTrackIdentifier implements TrackIdentifier {
 		if (!this.dir) {
 			await new Promise<void>((r) => this.tempDirCallbacks.add(r));
 		}
+
 		const producer = await helper.getAudioProducer("stream");
-		if (!producer) {
-			return null;
-		}
+		if (!producer) return null;
 
 		const stream = await producer.getStream();
 
 		const tempFile = path.join(this.dir, randomUUID());
 
-		return new Promise<string[] | null>((resolve, reject) => {
-			const hashStream = createHash("sha1");
+		const hash = createHash("sha1");
+		const fileStream = createWriteStream(tempFile);
 
-			const fileStream = createWriteStream(tempFile);
+		try {
+			stream.on("data", (chunk) => hash.update(chunk));
 
-			stream.on("data", (chunk: Buffer) => {
-				hashStream.update(chunk);
-				fileStream.write(chunk);
-			});
+			await once(stream.pipe(fileStream), "finish");
 
-			stream.on("error", reject);
-			fileStream.on("error", reject);
+			const digest = hash.digest("hex");
 
-			stream.on("end", async () => {
-				const hash = hashStream.digest("hex");
+			const fingerprint = await this.cache.getOrFind<string>(
+				digest,
+				() =>
+					new Promise((resolve, reject) => {
+						const fpcalc = spawn("fpcalc", ["-json", tempFile]);
 
-				this.cache
-					.getOrFind<string>(
-						hash,
-						() =>
-							new Promise((resolve, reject) => {
-								const fpcalc = spawn("fpcalc", ["-json", tempFile]);
+						let output = "";
 
-								fpcalc.on("error", reject);
+						fpcalc.stdout.on("data", (c) => (output += c.toString()));
+						fpcalc.stderr.resume();
 
-								fpcalc.stderr.on("data", () => {});
+						fpcalc.on("error", reject);
 
-								let output = "";
-								fpcalc.stdout.on("data", (chunk: Buffer) => {
-									output += chunk.toString();
-								});
+						fpcalc.on("close", (code) => {
+							try {
+								if (code !== 0 && code !== 3) {
+									throw new Error(`fpcalc failed: ${code}`);
+								}
 
-								fpcalc.addListener("close", (code) => {
-									try {
-										if (code !== 0 && code !== 3) {
-											throw new Error(
-												`fpcalc exited with non-zero code "${code}"`,
-											);
-										}
+								const data = JSON.parse(output);
 
-										const data: FpcalcOutput = JSON.parse(output);
+								resolve(`${Math.round(data.duration)}:${data.fingerprint}`);
+							} catch (e) {
+								reject(e);
+							}
+						});
+					}),
+			);
 
-										if (
-											!("fingerprint" in data) ||
-											typeof data.fingerprint != "string"
-										) {
-											throw new Error("Fingerprint missing from fpcalc output");
-										}
-
-										if (
-											!("duration" in data) ||
-											typeof data.duration != "number"
-										) {
-											throw new Error("Duration missing from fpcalc output");
-										}
-										if (!data.duration) {
-											throw new Error("Duration from fpcalc is 0");
-										}
-
-										resolve(`${Math.round(data.duration)}:${data.fingerprint}`);
-									} catch (e) {
-										reject(e);
-									}
-								});
-							}),
-					)
-					.then((fingerprint) => resolve([fingerprint]))
-					.catch(reject);
-			});
-		}).finally(() => {
-			rm(tempFile, {
-				recursive: true,
-			}).catch(console.error);
-		});
+			return [fingerprint];
+		} finally {
+			rm(tempFile).catch(console.error);
+		}
 	}
 }
