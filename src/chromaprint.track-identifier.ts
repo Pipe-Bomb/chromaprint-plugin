@@ -10,7 +10,7 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { PersistentCache } from "./persistent-cache.js";
 import { rm } from "node:fs/promises";
-import { once } from "node:stream";
+import { once } from "stream";
 
 interface FpcalcOutput {
 	duration: number;
