@@ -10,12 +10,6 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { PersistentCache } from "./persistent-cache.js";
 import { rm } from "node:fs/promises";
-import { once } from "stream";
-
-interface FpcalcOutput {
-	duration: number;
-	fingerprint: string;
-}
 
 export class ChromaprintTrackIdentifier implements TrackIdentifier {
 	public readonly id = "chromaprint";
@@ -58,18 +52,37 @@ export class ChromaprintTrackIdentifier implements TrackIdentifier {
 
 		const tempFile = path.join(this.dir, randomUUID());
 
-		const hash = createHash("sha1");
-		const fileStream = createWriteStream(tempFile);
-
 		try {
-			stream.on("data", (chunk) => hash.update(chunk));
+			const hash = await new Promise<string>((resolve, reject) => {
+				const hashStream = createHash("sha1");
+				const fileStream = createWriteStream(tempFile);
 
-			await once(stream.pipe(fileStream), "finish");
+				stream.on("data", (chunk: Buffer) => {
+					hashStream.update(chunk);
+					fileStream.write(chunk);
+				});
 
-			const digest = hash.digest("hex");
+				stream.on("error", (err) => {
+					fileStream.destroy();
+					reject(err);
+				});
+
+				fileStream.on("error", (err) => {
+					fileStream.destroy();
+					reject(err);
+				});
+
+				stream.on("end", () => {
+					fileStream.end();
+				});
+
+				fileStream.on("finish", () => {
+					resolve(hashStream.digest("hex"));
+				});
+			});
 
 			const fingerprint = await this.cache.getOrFind<string>(
-				digest,
+				hash,
 				() =>
 					new Promise((resolve, reject) => {
 						const fpcalc = spawn("fpcalc", ["-json", tempFile]);
