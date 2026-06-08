@@ -1,0 +1,16 @@
+# Chromaprint Plugin
+
+Uses [Chromaprint](https://acoustid.org/chromaprint) to generate a fingerprint for every track. While collisions aren't uncommon, this provides a pretty good way to identify songs. The generated fingerprint should be the same for multiple files containing the same audio, even at wildly different qualities.
+
+**Requires the `fpcalc` binary to be added to PATH.**
+
+This plugin registers the "chromaprint" track identity, and stores the fingerprint in the format `{DURATION}:{FINGERPRINT}`.
+
+## Installation
+
+Clone the repo into your [Pipe Bomb server's](https://github.com/pipe-bomb/server) `plugins` directory. Then inside, run:
+
+```bash
+npm ci
+npm run build
+```
