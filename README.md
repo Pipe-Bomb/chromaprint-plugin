@@ -1,4 +1,7 @@
-# Chromaprint Plugin
+<h1>
+    <img src="https://raw.githubusercontent.com/Pipe-Bomb/.github/refs/heads/master/assets/logos/Pipe%20Bomb%20no%20background%20w%20outline.png" width="40" />
+    Chromaprint Plugin
+</h1>
 
 Uses [Chromaprint](https://acoustid.org/chromaprint) to generate a fingerprint for every track. While collisions aren't uncommon, this provides a pretty good way to identify songs. The generated fingerprint should be the same for multiple files containing the same audio, even at wildly different qualities.
 
