@@ -14,3 +14,7 @@ Clone the repo into your [Pipe Bomb server's](https://github.com/pipe-bomb/serve
 npm ci
 npm run build
 ```
+
+## Usage
+
+Because `fpcalc` requires an audio stream, tracks that only provide an HLS audio producer are not supported. In most cases, Requesting for the server to cache these tracks will save them as streams, which this plugin can read. As such, it is recommended to use Chromaprint _after_ all HLS tracks have been cached.
